@@ -38,11 +38,7 @@ jobs:
         restore-keys: |
           trivy-db-${{ runner.os }}-
 
-    # 5. List files for debugging
-    - name: List repository files
-      run: ls -R
-
-    # 6. Extract the image repository and tag
+    # 5. Extract the image repository and tag
     - name: Extract image from values.yaml
       id: extract_image
       run: |
@@ -54,51 +50,27 @@ jobs:
         fi
         echo "IMAGE=${IMAGE_REPO}:${IMAGE_TAG}" >> $GITHUB_ENV
 
-    # 7. Debug extracted image
+    # 6. Debug extracted image
     - name: Debug extracted image values
       run: |
         echo "IMAGE_REPO: ${{ env.IMAGE_REPO }}"
         echo "IMAGE_TAG: ${{ env.IMAGE_TAG }}"
         echo "IMAGE: ${{ env.IMAGE }}"
 
-    # 8. Scan image with Trivy and save results as JSON
+    # 7. Scan image with Trivy and save results as JSON
     - name: Scan image with Trivy
       id: scan_image
       run: |
         echo "Scanning image ${{ env.IMAGE }} for vulnerabilities..."
         trivy image --severity HIGH,CRITICAL --exit-code 0 --no-progress --format json --output trivy-scan-results.json ${{ env.IMAGE }}
 
-    # 9. Display Trivy scan results
+    # 8. Display Trivy scan results
     - name: Display Trivy Scan Results
       run: |
         echo "Trivy scan completed for image ${{ env.IMAGE }}."
         cat trivy-scan-results.json
 
-    # 10. Set up Python environment
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.9'
-
-    # 11. Install dependencies (pandas and openpyxl)
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pandas openpyxl
-
-    # 12. Run the Python script to convert JSON to Excel
-    - name: Convert JSON to Excel
-      run: |
-        python json_to_excel.py  # Assumes json_to_excel.py is in the root directory
-
-    # 13. Upload the scan results file as an artifact
-    - name: Upload Trivy Scan Results
-      uses: actions/upload-artifact@v3
-      with:
-        name: trivy-scan-results
-        path: trivy-scan-results.json
-
-    # 14. Create a Jira ticket if vulnerabilities are found
+    # 9. Create a Jira ticket if vulnerabilities are found
     - name: Create Jira Issue for vulnerabilities
       if: always()
       env:
