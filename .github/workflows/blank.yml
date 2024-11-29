@@ -1,0 +1,72 @@
+name: Helm Image Vulnerability Scan
+
+on: 
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs: 
+  vulnerability-scan:
+    runs-on: ubuntu-latest
+    steps:
+    # 1. Checkout the repository
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    # 2. Set up Helm
+    - name: Set up Helm
+      uses: azure/setup-helm@v1
+
+    # 3. Install Trivy
+    - name: Install Trivy
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget
+        wget https://github.com/aquasecurity/trivy/releases/download/v0.35.0/trivy_0.35.0_Linux-64bit.deb
+        sudo dpkg -i trivy_0.35.0_Linux-64bit.deb
+
+    # 4. Cache Trivy DB
+    - name: Cache Trivy DB
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/trivy
+        key: trivy-db-${{ runner.os }}-${{ hashFiles('**/*.yaml', '**/*.yml') }}
+        restore-keys: |
+          trivy-db-${{ runner.os }}-
+
+    # 5. List files for debugging
+    - name: List repository files
+      run: ls -R
+
+    # 6. Extract the image repository and tag
+    - name: Extract image from values.yaml
+      id: extract_image
+      run: |
+        IMAGE_REPO=$(grep -oP 'repository:\s*\K\S+' charts/uptime-kuma/values.yaml || echo "not_found")
+        IMAGE_TAG=$(grep -oP 'tag:\s*\K\S+' charts/uptime-kuma/values.yaml || echo "latest")
+        if [[ "$IMAGE_REPO" == "not_found" ]]; then
+          echo "Error: IMAGE_REPO not found in values.yaml"
+          exit 1
+        fi
+        echo "IMAGE=${IMAGE_REPO}:${IMAGE_TAG}" >> $GITHUB_ENV
+        echo "Extracted Image: ${IMAGE_REPO}:${IMAGE_TAG}"
+
+    # 7. Debug extracted image
+    - name: Debug extracted image values
+      run: |
+        echo "IMAGE_REPO: ${{ env.IMAGE_REPO }}"
+        echo "IMAGE_TAG: ${{ env.IMAGE_TAG }}"
+
+    # 8. Scan image with Trivy
+    - name: Scan image with Trivy
+      run: |
+        echo "Scanning image ${{ env.IMAGE }} for vulnerabilities..."
+        trivy image --severity HIGH,CRITICAL --exit-code 0 --no-progress ${{ env.IMAGE }} || echo "Vulnerabilities found, but workflow will continue"
+
+    # 9. Optionally: Display Trivy scan results
+    - name: Display Trivy Scan Results
+      run: |
+        echo "Trivy scan completed for image ${{ env.IMAGE }}."
