@@ -53,9 +53,6 @@ jobs:
           exit 1
         fi
         echo "IMAGE=${IMAGE_REPO}:${IMAGE_TAG}" >> $GITHUB_ENV
-      env:
-        IMAGE_REPO: ${{ steps.extract_image.outputs.IMAGE_REPO }}
-        IMAGE_TAG: ${{ steps.extract_image.outputs.IMAGE_TAG }}
 
     # 7. Debug extracted image
     - name: Debug extracted image values
@@ -69,12 +66,13 @@ jobs:
       id: scan_image
       run: |
         echo "Scanning image ${{ env.IMAGE }} for vulnerabilities..."
-        trivy image --severity HIGH,CRITICAL --exit-code 0 --no-progress --format json --output trivy-scan-results.json ${{ env.IMAGE }} || echo "Vulnerabilities found, but workflow will continue"
+        trivy image --severity HIGH,CRITICAL --exit-code 0 --no-progress --format json --output trivy-scan-results.json ${{ env.IMAGE }}
 
     # 9. Display Trivy scan results
     - name: Display Trivy Scan Results
       run: |
         echo "Trivy scan completed for image ${{ env.IMAGE }}."
+        cat trivy-scan-results.json
 
     # 10. Set up Python environment
     - name: Set up Python
@@ -108,7 +106,11 @@ jobs:
         JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
         JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
       run: |
-        VULNERABILITIES=$(cat trivy-scan-results.json)
+        VULNERABILITIES=$(jq '.Results[].Vulnerabilities[] | select(.Severity == "HIGH" or .Severity == "CRITICAL")' trivy-scan-results.json)
+        if [ -z "$VULNERABILITIES" ]; then
+          echo "No high or critical vulnerabilities found."
+          exit 0
+        fi
         ISSUE_BODY="### Vulnerabilities detected in the image:
         \`\`\`
         $VULNERABILITIES
@@ -122,7 +124,7 @@ jobs:
               "project": {
                 "key": "YOUR_PROJECT_KEY"
               },
-              "summary": "Vulnerability Scan Results for ${{ env.IMAGE }}",
+              "summary": "Vulnerability Scan Results for '"${{ env.IMAGE }}"'",
               "description": "'"$ISSUE_BODY"'",
               "issuetype": {
                 "name": "Bug"
